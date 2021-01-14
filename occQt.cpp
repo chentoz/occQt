@@ -63,6 +63,13 @@
 
 #include <AIS_Shape.hxx>
 
+#include <Quantity_HArray1OfColor.hxx>
+#include <TopTools_HSequenceOfShape.hxx>
+#include <VrmlData_Scene.hxx>
+#include <VrmlData_ShapeConvert.hxx>
+#include <VrmlData_ShapeNode.hxx>
+#include <StlAPI_Writer.hxx>
+
 occQt::occQt(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -456,12 +463,16 @@ void occQt::testFuse()
     gp_Ax2 anAxis;
     anAxis.SetLocation(gp_Pnt(0.0, 100.0, 0.0));
 
-    TopoDS_Shape aTopoBox = BRepPrimAPI_MakeBox(anAxis, 3.0, 4.0, 5.0).Shape();
+    TopoDS_Shape aTopoBox = BRepPrimAPI_MakeBox(anAxis, 10.0, 10.0, 10.0).Shape();
+
+    anAxis.SetLocation(gp_Pnt(5.0, 105.0, 0.0));
     TopoDS_Shape aTopoSphere = BRepPrimAPI_MakeSphere(anAxis, 2.5).Shape();
-    TopoDS_Shape aFusedShape = BRepAlgoAPI_Fuse(aTopoBox, aTopoSphere);
+
+    anAxis.SetLocation(gp_Pnt(0.0, 100.0, 0.0));
+    TopoDS_Shape aFusedShape = BRepAlgoAPI_Cut(aTopoBox, aTopoSphere);
 
     gp_Trsf aTrsf;
-    aTrsf.SetTranslation(gp_Vec(8.0, 0.0, 0.0));
+    aTrsf.SetTranslation(gp_Vec(20.0, 0.0, 0.0));
     BRepBuilderAPI_Transform aTransform(aFusedShape, aTrsf);
 
     Handle(AIS_Shape) anAisBox = new AIS_Shape(aTopoBox);
@@ -667,4 +678,215 @@ void occQt::makeToroidalHelix()
         anAisPipe->SetColor(Quantity_NOC_CORNSILK1);
         myOccView->getContext()->Display(anAisPipe, Standard_True);
     }
+}
+
+Handle(TopTools_HSequenceOfShape) BuildSequenceFromContext(const Handle(AIS_InteractiveContext)& anInteractiveContext,
+                                                                          Handle(Quantity_HArray1OfColor)&      anArrayOfColors,
+                                                                          Handle(TColStd_HArray1OfReal)&        anArrayOfTransparencies)
+{
+    Handle(TopTools_HSequenceOfShape) aSequence;
+     Standard_Integer nb = anInteractiveContext->NbSelected(), i = 1;
+     if (!nb)
+         return aSequence;
+
+     aSequence               = new TopTools_HSequenceOfShape();
+     anArrayOfColors         = new Quantity_HArray1OfColor(1, nb);
+     anArrayOfTransparencies = new TColStd_HArray1OfReal  (1, nb);
+
+     Handle(AIS_InteractiveObject) picked;
+     for (anInteractiveContext->InitSelected(); anInteractiveContext->MoreSelected(); anInteractiveContext->NextSelected())
+       {
+         picked = anInteractiveContext->SelectedInteractive();
+         if (picked->IsKind (STANDARD_TYPE (AIS_Shape)))
+          {
+             Handle(AIS_Shape) aisShape = Handle(AIS_Shape)::DownCast(picked);
+             TopoDS_Shape aShape = aisShape->Shape();
+             aSequence->Append(aShape);
+
+             Quantity_Color color;
+             aisShape->Color(color);
+             anArrayOfColors->SetValue(i, color);
+
+             Standard_Real transparency = aisShape->Transparency();
+             anArrayOfTransparencies->SetValue(i, transparency);
+
+             i++;
+          }
+       }
+       return aSequence;
+}
+
+void occQt::on_actionSave_VRML_triggered()
+{
+    auto anInteractiveContext = myOccView->getContext();
+    anInteractiveContext->InitSelected();
+    if (anInteractiveContext->NbSelected() == 0){
+        return;
+    }
+
+    Handle(TopTools_HSequenceOfShape) aSequence;
+    Handle(TColStd_HArray1OfReal)   anArrayOfTransparencies;
+    Handle(Quantity_HArray1OfColor) anArrayOfColors;
+
+    Standard_Integer nb = anInteractiveContext->NbSelected();
+    auto i = 1;
+    if (!nb) return;
+
+    aSequence               = new TopTools_HSequenceOfShape();
+    anArrayOfColors         = new Quantity_HArray1OfColor(1, nb);
+    anArrayOfTransparencies = new TColStd_HArray1OfReal  (1, nb);
+
+    Handle(AIS_InteractiveObject) picked;
+    for (anInteractiveContext->InitSelected(); anInteractiveContext->MoreSelected(); anInteractiveContext->NextSelected())
+    {
+      picked = anInteractiveContext->SelectedInteractive();
+      if (picked->IsKind (STANDARD_TYPE (AIS_Shape)))
+       {
+          Handle(AIS_Shape) aisShape = Handle(AIS_Shape)::DownCast(picked);
+          TopoDS_Shape aShape = aisShape->Shape();
+          aSequence->Append(aShape);
+
+          Quantity_Color color;
+          aisShape->Color(color);
+          anArrayOfColors->SetValue(i, color);
+
+          Standard_Real transparency = aisShape->Transparency();
+          anArrayOfTransparencies->SetValue(i, transparency);
+
+          i++;
+       }
+    }
+
+    TCollection_AsciiString aFileName ((const char* )"C:\\Users\\Lenovo\\Desktop\\test.VRML");
+    TCollection_AsciiString Message;
+
+    VrmlData_Scene scene;
+    VrmlData_ShapeConvert converter(scene/*, 0.001*/); // from mm to meters
+    Standard_Integer iShape = 1; // Counter of shapes
+
+    for (int i = 1; i <= aSequence ->Length(); i++)
+    {
+        // Shape
+        TopoDS_Shape shape = aSequence->Value(i);
+        if (shape.IsNull())
+        {
+          continue;
+        }
+
+        // Color
+        Quantity_Color color; // yellow
+        if (!anArrayOfColors.IsNull())
+            color = anArrayOfColors->Value(i);
+
+        // Transparency
+        Standard_Real transparency = 0.0;
+        if (!anArrayOfTransparencies.IsNull())
+            transparency = anArrayOfTransparencies->Value(i);
+
+        // Give a name to the shape.
+        TCollection_AsciiString name("Shape");
+        name += TCollection_AsciiString(iShape++);
+        converter.AddShape(shape, name.ToCString());
+
+        // Check presence of faces in the shape.
+        TopExp_Explorer expl(shape, TopAbs_FACE);
+        if (expl.More())
+            converter.Convert(true, false, 0.01); // faces only
+        else
+            converter.Convert(false, true, 0.01); // edges only
+
+        // Name of the color & transparency.
+        // It will be uniquely saved in VRML file.
+        TCollection_AsciiString cname = Quantity_Color::StringName(color.Name());
+        cname += transparency;
+
+        // Make the appearance (VRML attribute)
+        Handle(VrmlData_Appearance) appearance = Handle(VrmlData_Appearance)::DownCast(scene.FindNode(cname.ToCString()));
+        if (appearance.IsNull())
+        {
+            // Not found ... create a new one.
+            Handle(VrmlData_Material) material = new VrmlData_Material(scene, cname.ToCString(), 0.2, 0.2, transparency);
+            material->SetDiffuseColor(color);
+            material->SetEmissiveColor(color);
+            material->SetSpecularColor(color);
+            scene.AddNode(material, false);
+            appearance = new VrmlData_Appearance(scene, cname.ToCString());
+            appearance->SetMaterial(material);
+            scene.AddNode(appearance, false);
+        }
+
+        // Apply the material to the shape of entity.
+        Handle(VrmlData_Group) group = Handle(VrmlData_Group)::DownCast(scene.FindNode(name.ToCString()));
+        if (!group.IsNull())
+        {
+            VrmlData_ListOfNode::Iterator itr = group->NodeIterator();
+            for (; itr.More(); itr.Next())
+            {
+                Handle(VrmlData_Node) node = itr.Value();
+                if (node->DynamicType() == STANDARD_TYPE(VrmlData_ShapeNode))
+                {
+                    Handle(VrmlData_ShapeNode) aShape = Handle(VrmlData_ShapeNode)::DownCast(node);
+                    aShape->SetAppearance(appearance);
+                }
+                else if (itr.Value()->DynamicType() == STANDARD_TYPE(VrmlData_Group))
+                {
+                    Handle(VrmlData_Group) groupc = Handle(VrmlData_Group)::DownCast(itr.Value());
+                    VrmlData_ListOfNode::Iterator itrc = groupc->NodeIterator();
+                    for (; itrc.More(); itrc.Next())
+                    {
+                        Handle(VrmlData_Node) nodec = itrc.Value();
+                        if (nodec->DynamicType() == STANDARD_TYPE(VrmlData_ShapeNode))
+                        {
+                            Handle(VrmlData_ShapeNode) shapec = Handle(VrmlData_ShapeNode)::DownCast(nodec);
+                            shapec->SetAppearance(appearance);
+                        }
+                    } // for of group nodes...
+                } // if (it is a shape node...
+            } // for of group nodes...
+        } // if (!group.IsNull...
+    } // iterator of shapes
+
+    // Call VRML writer
+    std::ofstream writer(aFileName.ToCString());
+    writer<<scene;
+    writer.close();
+}
+
+void occQt::on_actionSave_STL_triggered()
+{
+    auto anInteractiveContext = myOccView->getContext();
+    anInteractiveContext->InitSelected();
+    if (anInteractiveContext->NbSelected() == 0){
+         return;
+    }
+
+    Handle(Quantity_HArray1OfColor)   anArrayOfColors;
+    Handle(TColStd_HArray1OfReal)     anArrayOfTransparencies;
+    auto aSequence = BuildSequenceFromContext(anInteractiveContext, anArrayOfColors, anArrayOfTransparencies);
+
+    if (aSequence->Length() == 0)
+    {
+        return;
+    }
+
+    TopoDS_Compound RES;
+    BRep_Builder MKCP;
+    MKCP.MakeCompound(RES);
+
+    for (Standard_Integer i=1;i<=aSequence->Length();i++)
+    {
+        TopoDS_Shape aShape= aSequence->Value(i);
+        TCollection_AsciiString anObjectName("anObjectName_");
+        anObjectName += i;
+
+        if ( aShape.IsNull() )
+        {
+            continue;
+        }
+
+        MKCP.Add(RES, aShape);
+    }
+
+    StlAPI_Writer myStlWriter;
+    myStlWriter.Write(RES, "C:\\Users\\Lenovo\\Desktop\\test.STL");
 }

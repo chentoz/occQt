@@ -24,7 +24,7 @@
      <x>0</x>
      <y>0</y>
      <width>800</width>
-     <height>21</height>
+     <height>23</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -32,6 +32,8 @@
      <string>File</string>
     </property>
     <addaction name="actionExit"/>
+    <addaction name="actionSave_VRML"/>
+    <addaction name="actionSave_STL"/>
    </widget>
    <widget class="QMenu" name="menuView">
     <property name="title">
@@ -281,6 +283,16 @@
    </property>
    <property name="text">
     <string>Helix</string>
+   </property>
+  </action>
+  <action name="actionSave_VRML">
+   <property name="text">
+    <string>Save VRML</string>
+   </property>
+  </action>
+  <action name="actionSave_STL">
+   <property name="text">
+    <string>Save STL</string>
    </property>
   </action>
  </widget>
