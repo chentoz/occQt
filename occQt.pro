@@ -83,4 +83,6 @@ LIBS +=         \
     -lTKService \
     -lTKV3d     \
     -lTKOpenGl  \
-    -lTKFillet
+    -lTKFillet  \
+    -lTKVRML    \
+    -lTKSTL

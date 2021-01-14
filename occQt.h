@@ -93,6 +93,10 @@ private slots:
     //! test helix shapes.
     void testHelix(void);
 
+    void on_actionSave_VRML_triggered();
+
+    void on_actionSave_STL_triggered();
+
 private:
     Ui::occQtClass ui;
 
