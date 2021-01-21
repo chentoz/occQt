@@ -1,5 +1,15 @@
 # Generated from occQt.pro.
 
+#### Qt5
+find_package( Qt5Core REQUIRED )
+find_package( Qt5Widgets REQUIRED )
+find_package( Qt5Gui REQUIRED )
+find_package( Qt5OpenGL REQUIRED )
+find_package( Qt5Multimedia REQUIRED )
+#find_package( Qt5WebKitWidgets REQUIRED )
+find_package( Qt5Xml REQUIRED )
+set( CMAKE_AUTOMOC ON )  # to automoc remove the need to wrap by hand
+
 #####################################################################
 ## occQt Binary:
 #####################################################################
